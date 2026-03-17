@@ -1,0 +1,32 @@
+# --- Python Virtual Environment ---
+venv/
+env/
+.env
+bin/
+include/
+lib/
+lib64/
+share/
+pyvenv.cfg
+
+# --- Vector Databases (CRITICAL: Do not push these) ---
+chroma_ast_db/
+milvus_ast_rag.db
+*.db
+*.sqlite3
+
+# --- AI/ML Caches ---
+.cache/
+onnx_models/
+sentence_transformers/
+
+# --- Python System Files ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# --- IDE Files ---
+.vscode/
+.idea/
+.DS_Store
