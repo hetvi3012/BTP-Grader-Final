@@ -123,8 +123,7 @@ class LLMClient:
                     prompt_tokens=chunk.usage.prompt_tokens,
                     completion_tokens=chunk.usage.completion_tokens,
                     total_tokens=chunk.usage.total_tokens,
-                    cached_tokens=chunk.usage.prompt_tokens_details.cached_tokens,
-                )
+                    cached_tokens=(chunk.usage.prompt_tokens_details.cached_tokens if getattr(chunk.usage, "prompt_tokens_details", None) else 0),                )
 
             if not chunk.choices:
                 continue
