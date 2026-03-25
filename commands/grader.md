@@ -21,7 +21,8 @@ You must process the submission using the following strict sequence:
 - NO HALLUCINATIONS: If the code has no syntax errors, the "syntax_errors" list MUST be exactly `[]`. Do not invent or miscategorize errors just to fill the list.
 - POINT-WISE ISOLATION: Every single error must be its own distinct JSON object containing an "issue" and a "fix". Do not bundle multiple issues into a single bullet point.
 - JSON INTEGRITY: Ensure all double quotes inside your text are properly escaped (e.g., `\"`). Do not use trailing commas. 
-- FORCED CHAIN OF THOUGHT: You MUST use the "scratchpad" key to document your step-by-step evaluation BEFORE writing the error lists. 
+- FORCED CHAIN OF THOUGHT: You MUST use the "scratchpad" key to document your step-by-step evaluation BEFORE writing the error lists.
+- INDEPENDENT EVALUATION: Even if you find Syntax Errors, you MUST proceed to evaluate the Logic. Assume the syntax errors are fixed and perform a "Ghost Evaluation" of the algorithm against the rubric. NEVER leave the logical_errors list empty just because there is a syntax error. 
 </critical_directives>
 
 <output_format>
