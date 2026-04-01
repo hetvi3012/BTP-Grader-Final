@@ -9,7 +9,7 @@ from tools.builtin.todo import TodosTool
 from tools.builtin.web_fetch import WebFetchTool
 from tools.builtin.web_search import WebSearchTool
 from tools.builtin.write_file import WriteFileTool
-
+from tools.builtin.context_graph import ContextGraphTool
 __all__ = [
     "ReadFileTool",
     "WriteFileTool",
@@ -22,6 +22,7 @@ __all__ = [
     "WebFetchTool",
     "TodosTool",
     "MemoryTool",
+    "ContextGraphTool",
 ]
 
 
@@ -38,4 +39,5 @@ def get_all_builtin_tools() -> list[type]:
         WebFetchTool,
         TodosTool,
         MemoryTool,
+        ContextGraphTool,
     ]

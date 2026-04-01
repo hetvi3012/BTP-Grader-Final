@@ -19,16 +19,18 @@ class MessageItem:
     pruned_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {"role": self.role}
+        # Start with the mandatory fields for ALL providers
+        result: dict[str, Any] = {
+            "role": self.role,
+            "content": self.content if self.content is not None else ""
+        }
 
+        # Add optional fields only if they have data
         if self.tool_call_id:
             result["tool_call_id"] = self.tool_call_id
 
         if self.tool_calls:
             result["tool_calls"] = self.tool_calls
-
-        if self.content:
-            result["content"] = self.content
 
         return result
 

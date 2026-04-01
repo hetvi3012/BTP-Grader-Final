@@ -1,4 +1,7 @@
 from __future__ import annotations
+import json
+import re       # NEW: Added for Nuclear Interceptor
+import uuid     # NEW: Added for Nuclear Interceptor
 from typing import AsyncGenerator, Awaitable, Callable
 from agent.events import AgentEvent, AgentEventType
 from agent.session import Session
@@ -6,7 +9,6 @@ from client.response import StreamEventType, TokenUsage, ToolCall, ToolResultMes
 from config.config import Config
 from prompts.system import create_loop_breaker_prompt
 from tools.base import ToolConfirmation
-import json
 
 class Agent:
     def __init__(
@@ -76,6 +78,35 @@ class Agent:
                 elif event.type == StreamEventType.MESSAGE_COMPLETE:
                     usage = event.usage
 
+            # =================================================================
+            # 🚨 THE NUCLEAR INTERCEPTOR (FORCES HALLUCINATED JSON TO RUN) 🚨
+            # =================================================================
+            if not tool_calls and response_text:
+                # 1. Clean the Llama 3.1 specific hallucination tag
+                response_text = response_text.replace("<|python_tag|>", "")
+                
+                # 2. Hunt for ANY valid JSON tool call string in the plain text
+                matches = re.finditer(r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"parameters"\s*:\s*(\{.*?\})\s*\}', response_text, re.DOTALL)
+                
+                for match in matches:
+                    try:
+                        tool_name = match.group(1)
+                        tool_params = json.loads(match.group(2)) # Validate it's real JSON
+                        
+                        # 3. Create a hijacked synthetic tool call
+                        synthetic_call = ToolCall(
+                            call_id=f"call_hijacked_{uuid.uuid4().hex[:6]}",
+                            name=tool_name,
+                            arguments=tool_params
+                        )
+                        tool_calls.append(synthetic_call)
+                        
+                        # 4. Erase the JSON text so the user doesn't see the ugly raw string
+                        response_text = response_text.replace(match.group(0), "").strip()
+                    except json.JSONDecodeError:
+                        pass # Was not valid JSON, ignore it.
+            # =================================================================
+
             self.session.context_manager.add_assistant_message(
                 response_text or "",
                 (
@@ -93,6 +124,7 @@ class Agent:
                     else None
                 ),
             )
+            
             if response_text:
                 yield AgentEvent.text_complete(response_text)
                 self.session.loop_detector.record_action(
