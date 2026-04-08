@@ -99,7 +99,7 @@ async def main():
         
         # [!] MONKEY-PATCH: Hide all tools from the Agent.
         # This prevents the 70B model from trying to execute student code in your terminal!
-        agent.session.tool_registry.get_tools = lambda: []
+        agent.session.tool_registry.get_tools = lambda: [] # This prevents the LLM from executing arbitrary code.
         
         student_files = list(input_dir.glob("*.py"))
         

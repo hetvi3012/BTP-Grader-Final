@@ -9,6 +9,7 @@ import io
 import textwrap
 from dotenv import load_dotenv
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 
 # Load environment variables
 load_dotenv(override=True)
@@ -18,7 +19,7 @@ load_dotenv(override=True)
 # Force the environment variables BEFORE importing the AI framework
 # This prevents the framework from secretly reading old models from config.toml files
 # ==========================================
-model_override = os.environ.get("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+model_override = os.environ.get("ollama", "llama3.1")
 os.environ["MODEL_NAME"] = model_override
 os.environ["MODEL"] = model_override
 os.environ["LITELLM_MODEL"] = model_override
@@ -40,12 +41,39 @@ from agent.events import AgentEventType
 # ==========================================
 # 🚨 DECOUPLE FROM CLI PROMPT 🚨
 # ==========================================
+# ==========================================
+# 🚨 DECOUPLE FROM CLI PROMPT & FORCE SCHEMA 🚨
+# ==========================================
+# ==========================================
+# 🚨 DECOUPLE FROM CLI PROMPT & FORCE SCHEMA 🚨
+# ==========================================
 import prompts.system
 prompts.system.get_system_prompt = lambda *args, **kwargs: """
 You are a strict, backend Automated Grading API.
-Your ONLY purpose is to evaluate student code based on a rubric and output STRICT, VALID JSON.
-DO NOT use tools. DO NOT use markdown code blocks (like ```json).
-DO NOT output conversational text, preambles, or postambles. ONLY output the raw JSON object.
+Your ONLY purpose is to evaluate student code based on a rubric.
+
+You MUST structure your response EXACTLY like this, using these two tags:
+
+[JSON_REPORT]
+{
+  "detected_language": "C",
+  "overview": "Short summary of the submission",
+  "syntax_errors": [
+    {"issue": "Describe compilation error", "fix": "Code to fix it"}
+  ],
+  "logical_errors": [
+    {"issue": "Describe rubric violation", "fix": "Algorithmic fix"}
+  ],
+  "scratchpad": "Brief TA evaluation notes"
+}
+[/JSON_REPORT]
+
+[CORRECTED_CODE]
+Write the fully corrected code here.
+Use inline comments like // LLM FIX: to explain changes.
+[/CORRECTED_CODE]
+
+DO NOT output any conversational text before or after these tags.
 """
 
 # ==========================================
@@ -58,12 +86,12 @@ def safe_write(pdf, text, indent=0):
         # Force wrap at 85 characters so long code snippets don't break the page
         lines = textwrap.wrap(paragraph, width=85, break_long_words=True)
         if not lines:
-            pdf.ln(6)
+            pdf.cell(0, 6, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             continue
         for line in lines:
             if indent > 0:
                 pdf.cell(indent, 6, "") # Indentation spacing
-            pdf.cell(0, 6, line, ln=True)
+            pdf.cell(0, 6, line, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
 def create_pdf(filename: str, report: dict) -> bytes:
     pdf = FPDF()
@@ -73,56 +101,70 @@ def create_pdf(filename: str, report: dict) -> bytes:
     
     # Title
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, f"Automated Grading Report: {filename}", ln=True, align="C")
-    pdf.ln(5)
+    pdf.cell(0, 10, f"Automated Grading Report: {filename}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+    pdf.cell(0, 5, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     # Detected Language
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, f"Detected Language: {report.get('detected_language', 'Unknown')}", ln=True)
-    pdf.ln(2)
+    pdf.cell(0, 8, f"Detected Language: {report.get('detected_language', 'Unknown')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 2, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     # Overview
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Overview", ln=True)
+    pdf.cell(0, 10, "Overview", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", "", 12)
     safe_write(pdf, report.get("overview", "No overview provided."))
-    pdf.ln(5)
+    pdf.cell(0, 5, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     # Syntax / Compilation Errors
+    # Syntax / Compilation Errors
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Syntax & Compilation Errors", ln=True)
+    pdf.cell(0, 10, "Syntax & Compilation Errors", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     syntax_errors = report.get("syntax_errors", [])
-    if not syntax_errors:
-        pdf.set_font("Helvetica", "I", 12)
-        safe_write(pdf, "No syntax errors detected. The code compiles/runs.")
-    else:
+    
+    if isinstance(syntax_errors, list) and len(syntax_errors) > 0:
         for i, err in enumerate(syntax_errors, 1):
             pdf.set_font("Helvetica", "B", 12)
-            safe_write(pdf, f"{i}. Issue: {err.get('issue', '')}")
-            pdf.set_font("Helvetica", "", 12)
-            safe_write(pdf, f"Fix: {err.get('fix', '')}", indent=5)
-            pdf.ln(2)
-    pdf.ln(5)
+            if isinstance(err, dict):
+                safe_write(pdf, f"{i}. Issue: {err.get('issue', 'Unknown')}")
+                pdf.set_font("Helvetica", "", 12)
+                safe_write(pdf, f"Fix: {err.get('fix', '')}", indent=5)
+            else:
+                safe_write(pdf, f"{i}. {err}")
+            pdf.cell(0, 5, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    elif syntax_errors and not isinstance(syntax_errors, list): # Catch rogue booleans/strings
+        pdf.set_font("Helvetica", "", 12)
+        safe_write(pdf, str(syntax_errors))
+    else:
+        pdf.set_font("Helvetica", "I", 12)
+        safe_write(pdf, "No syntax errors detected. The code compiles/runs.")
+    pdf.cell(0, 5, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     # Logical Errors & Rubric Violations
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Logical Errors & Rubric Violations", ln=True)
+    pdf.cell(0, 10, "Logical Errors & Rubric Violations", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     logical_errors = report.get("logical_errors", [])
-    if not logical_errors:
-        pdf.set_font("Helvetica", "I", 12)
-        safe_write(pdf, "No logical errors detected. Excellent work!")
-    else:
+    
+    if isinstance(logical_errors, list) and len(logical_errors) > 0:
         for i, err in enumerate(logical_errors, 1):
             pdf.set_font("Helvetica", "B", 12)
-            safe_write(pdf, f"{i}. Issue: {err.get('issue', '')}")
-            pdf.set_font("Helvetica", "", 12)
-            safe_write(pdf, f"Fix: {err.get('fix', '')}", indent=5)
-            pdf.ln(2)
-            
+            if isinstance(err, dict):
+                safe_write(pdf, f"{i}. Issue: {err.get('issue', 'Unknown')}")
+                pdf.set_font("Helvetica", "", 12)
+                safe_write(pdf, f"Fix: {err.get('fix', '')}", indent=5)
+            else:
+                safe_write(pdf, f"{i}. {err}")
+            pdf.cell(0, 2, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    elif logical_errors and not isinstance(logical_errors, list): # Catch rogue booleans/strings
+        pdf.set_font("Helvetica", "", 12)
+        safe_write(pdf, str(logical_errors))
+    else:
+        pdf.set_font("Helvetica", "I", 12)
+        safe_write(pdf, "No logical errors detected. Excellent work!")
     # AI Scratchpad (TA Reference)
-    pdf.ln(10)
+    pdf.cell(0, 10, "", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "--- AI Evaluation Scratchpad (TA Reference) ---", ln=True)
+    pdf.cell(0, 10, "--- AI Evaluation Scratchpad (TA Reference) ---", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", "", 10)
     safe_write(pdf, report.get("scratchpad", "No scratchpad data."))
 
@@ -229,16 +271,87 @@ async def grade_student_code(agent: Agent, filename: str, student_code: str, rub
 
     raw_text = raw_text.strip()
     
-    # Bulletproof Regex JSON Extraction
-    json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-    if json_match:
-        raw_text = json_match.group(0)
+    # --- NEW TAG-BASED EXTRACTION ---
+    report_dict = {}
+    
+    # 1. Extract JSON
+    json_match = re.search(r'\[JSON_REPORT\](.*?)\[/JSON_REPORT\]', raw_text, re.DOTALL | re.IGNORECASE)
+    if not json_match:
+        # Fallback if it forgot the tags but still wrote JSON
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
-    try:
-        return json.loads(raw_text)
-    except json.JSONDecodeError:
-        return {"error": "LLM failed to output valid JSON", "raw_output": raw_text}
+    if json_match:
+        json_str = json_match.group(1) if '[JSON_REPORT]' in raw_text else json_match.group(0)
+        try:
+            report_dict = json.loads(json_str.strip(), strict=False)
+        except json.JSONDecodeError as e:
+            return {"error": f"LLM failed to output valid JSON: {str(e)}", "raw_output": raw_text}
+    else:
+        return {"error": "Could not find JSON block in LLM response.", "raw_output": raw_text}
 
+    # 2. Extract Corrected Code
+    code_match = re.search(r'\[CORRECTED_CODE\](.*?)\[/CORRECTED_CODE\]', raw_text, re.DOTALL | re.IGNORECASE)
+    if code_match:
+        # Clean up any markdown backticks the LLM might have added inside the tag
+        clean_code = code_match.group(1).strip()
+        clean_code = re.sub(r'^```[a-zA-Z]*\n', '', clean_code)
+        clean_code = re.sub(r'\n```$', '', clean_code)
+        
+        # Add it directly to the dictionary so the PDF generator can find it
+        report_dict["corrected_code"] = clean_code
+    else:
+        report_dict["corrected_code"] = "No corrected code provided by AI."
+
+    return report_dict
+
+async def process_files(uploaded_files, rubric_text, system_prompt):
+    config = load_config(cwd=Path.cwd())
+    
+    # Bypass Pydantic's frozen state to force the Groq model
+    try:
+        object.__setattr__(config, 'model_name', os.environ.get("MODEL_NAME"))
+    except Exception:
+        pass
+    
+    results = {}
+    
+    # Extract files from ZIPs and loose files
+    submissions_to_grade = extract_valid_files(uploaded_files)
+    
+    if not submissions_to_grade:
+        st.error("No valid code files (.c, .cpp, .py, .java, .js) found in the uploads!")
+        return results
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    total_files = len(submissions_to_grade)
+    
+    for i, submission in enumerate(submissions_to_grade):
+        status_text.text(f"Grading {submission['name']}... ({i+1}/{total_files})")
+        
+        # 🚨 SNOWBALL FIX: Create a BRAND NEW agent for EVERY student
+        async with Agent(config) as agent:
+            # Force disable tools for the grader
+            agent.session.tool_registry.get_tools = lambda: []
+            
+            report = await grade_student_code(agent, submission['name'], submission['content'], rubric_text, system_prompt)
+            
+            # 🚨 ZIP FOLDER FIX: Save the report AND the student metadata together
+            results[submission['name']] = {
+                "report": report,
+                "student_id": submission["student_id"],
+                "original_name": submission["original_name"]
+            }
+            
+        progress_bar.progress((i + 1) / total_files)
+        
+        # 🚨 RATE LIMIT FIX: Pause for 2 seconds
+        if i < total_files - 1:
+            await asyncio.sleep(2)
+            
+    status_text.text("Grading Complete!")
+    return results
 # ==========================================
 # 4. ZIP EXTRACTOR HELPER
 # ==========================================
@@ -282,53 +395,7 @@ def extract_valid_files(uploaded_files):
     return extracted_submissions
 
 # ==========================================
-# 5. BULK PROCESSING ORCHESTRATOR
-# ==========================================
-# ==========================================
-# 5. BULK PROCESSING ORCHESTRATOR
-# ==========================================
-async def process_files(uploaded_files, rubric_text, system_prompt):
-    config = load_config(cwd=Path.cwd())
-    
-    # Bypass Pydantic's frozen state to force the Groq model
-    try:
-        object.__setattr__(config, 'model_name', os.environ.get("MODEL_NAME"))
-    except Exception:
-        pass
-    
-    results = {}
-    
-    # Extract files from ZIPs and loose files
-    submissions_to_grade = extract_valid_files(uploaded_files)
-    
-    if not submissions_to_grade:
-        st.error("No valid code files (.c, .cpp, .py, .java, .js) found in the uploads!")
-        return results
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    total_files = len(submissions_to_grade)
-    
-    for i, submission in enumerate(submissions_to_grade):
-        status_text.text(f"Grading {submission['name']}... ({i+1}/{total_files})")
-        
-        # 🚨 FIX 1: Create a BRAND NEW agent with a wiped memory for EVERY student
-        async with Agent(config) as agent:
-            # Force disable tools for the grader
-            agent.session.tool_registry.get_tools = lambda: []
-            
-            report = await grade_student_code(agent, submission['name'], submission['content'], rubric_text, system_prompt)
-            results[submission['name']] = report
-            
-        progress_bar.progress((i + 1) / total_files)
-        
-        # 🚨 FIX 2: Pause for 2 seconds so Groq doesn't ban us for grading too fast
-        if i < total_files - 1:
-            await asyncio.sleep(2)
-            
-    status_text.text("Grading Complete!")
-    return results
+
 
 # ==========================================
 # 6. STREAMLIT UI LAYOUT
@@ -372,9 +439,50 @@ with st.sidebar:
     
     with st.expander("Advanced: Edit AI Persona"):
         system_prompt = st.text_area("Grader Instructions:", value=system_prompt_default, height=300)
+# ==========================================
+# 4. ZIP EXTRACTOR HELPER
+# ==========================================
+def extract_valid_files(uploaded_files):
+    """Processes uploaded files, unzipping archives in memory and extracting source code."""
+    extracted_submissions = []
+    allowed_extensions = {".py", ".cpp", ".c", ".java", ".js"}
 
+    for file in uploaded_files:
+        if file.name.lower().endswith('.zip'):
+            with zipfile.ZipFile(file, 'r') as z:
+                for file_info in z.infolist():
+                    if file_info.is_dir() or '__MACOSX' in file_info.filename:
+                        continue
+                    
+                    ext = os.path.splitext(file_info.filename)[1].lower()
+                    if ext in allowed_extensions:
+                        raw_bytes = z.read(file_info.filename)
+                        content = raw_bytes.decode('utf-8', errors='replace')
+                        
+                        student_id = file.name.replace('.zip', '')
+                        original_name = os.path.basename(file_info.filename)
+                        clean_filename = f"{student_id}_{original_name}"
+                        
+                        extracted_submissions.append({
+                            "student_id": student_id,          
+                            "original_name": original_name,    
+                            "name": clean_filename,
+                            "content": content
+                        })
+        else:
+            ext = os.path.splitext(file.name)[1].lower()
+            if ext in allowed_extensions:
+                extracted_submissions.append({
+                    "student_id": "Loose_Files",               
+                    "original_name": file.name,                
+                    "name": file.name,
+                    "content": file.getvalue().decode('utf-8', errors='replace')
+                })
+                
+    return extracted_submissions
 # --- MAIN UI AREA ---
 # UPDATE: Ensure the uploader accepts ZIP files in the UI
+# --- MAIN UI AREA ---
 # --- MAIN UI AREA ---
 uploaded_files = st.file_uploader(
     "Upload Student Submissions (.zip, .py, .cpp, .c, .java, .js)", 
@@ -392,18 +500,40 @@ if uploaded_files:
                 
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                    for filename, report in reports.items():
+                    for filename, data in reports.items():
+                        
+                        # Unpack the metadata
+                        report = data["report"]
+                        student_id = data["student_id"]
+                        original_name = data["original_name"]
+
+                        # 🚨 1. CATCH JSON ERRORS
                         if "error" in report:
-                            st.error(f"Failed to grade {filename}: {report['error']}")
+                            st.error(f"❌ LLM JSON Error on {filename}: {report['error']}")
+                            # Show the broken raw text so you can see what the LLM did wrong
+                            if "raw_output" in report:
+                                with st.expander(f"👀 View Broken LLM Output for {filename}"):
+                                    st.text(report["raw_output"])
+                            print(f"Skipped {filename} due to JSON error.")
                             continue
 
                         with st.expander(f"📄 Report: {filename}"):
                             st.json(report)
 
-                        pdf_bytes = create_pdf(filename, report)
-                        pdf_filename = f"{filename.split('.')[0]}_GradingReport.pdf"
-                        zip_file.writestr(pdf_filename, pdf_bytes)
-                
+                        # 🚨 2. CATCH PDF UNICODE CRASHES
+                        try:
+                            # Generate the PDF
+                            pdf_bytes = create_pdf(filename, report)
+                            
+                            # Create the Student Folder structure inside the ZIP
+                            pdf_filename = f"{student_id}/{original_name.split('.')[0]}_GradingReport.pdf"
+                            zip_file.writestr(pdf_filename, pdf_bytes)
+                            print(f"✅ Successfully added PDF for {filename}")
+                            
+                        except Exception as e:
+                            st.error(f"❌ PDF Generation Crashed for {filename}: {str(e)}")
+                            print(f"PDF CRASH on {filename}: {str(e)}")
+
                 st.download_button(
                     label="📥 Download All PDF Reports (ZIP)",
                     data=zip_buffer.getvalue(),
@@ -411,44 +541,4 @@ if uploaded_files:
                     mime="application/zip",
                     type="primary"
                 )
-# ==========================================
-# 4. ZIP EXTRACTOR HELPER
-# ==========================================
-def extract_valid_files(uploaded_files):
-    """Processes uploaded files, unzipping archives in memory and extracting source code."""
-    extracted_submissions = []
-    allowed_extensions = {".py", ".cpp", ".c", ".java", ".js"}
 
-    for file in uploaded_files:
-        if file.name.lower().endswith('.zip'):
-            # Open the ZIP file in memory
-            with zipfile.ZipFile(file, 'r') as z:
-                for file_info in z.infolist():
-                    # Skip directories and macOS hidden junk folders
-                    if file_info.is_dir() or '__MACOSX' in file_info.filename:
-                        continue
-                    
-                    ext = os.path.splitext(file_info.filename)[1].lower()
-                    if ext in allowed_extensions:
-                        # Read the file content
-                        raw_bytes = z.read(file_info.filename)
-                        content = raw_bytes.decode('utf-8', errors='replace')
-                        
-                        # Create a clear filename: "ZIPNAME_FILENAME"
-                        student_id = file.name.replace('.zip', '')
-                        clean_filename = f"{student_id}_{os.path.basename(file_info.filename)}"
-                        
-                        extracted_submissions.append({
-                            "name": clean_filename,
-                            "content": content
-                        })
-        else:
-            # It's a standard loose file, process normally
-            ext = os.path.splitext(file.name)[1].lower()
-            if ext in allowed_extensions:
-                extracted_submissions.append({
-                    "name": file.name,
-                    "content": file.getvalue().decode('utf-8', errors='replace')
-                })
-                
-    return extracted_submissions

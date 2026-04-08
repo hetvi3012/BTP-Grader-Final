@@ -27,24 +27,34 @@ You must process the submission using the following strict sequence:
 - CONCRETE ALGORITHMIC FIXES: When explaining a Logical Error, your "fix" MUST contain concrete algorithmic steps, data structures, or code logic. FORBIDDEN PHRASES: "Modify the algorithm", "Add logic to check", "Fix the edge case". You must explain EXACTLY HOW to fix it (e.g., "Group buildings by row in a hash map, sort the coordinates, and check min/max bounds.").
 - STRICT POINT-WISE ISOLATION: Every single error must be its own distinct JSON object. Do not bundle multiple flaws into one bullet point. 
 - JSON PARSER SURVIVAL: You MUST escape all double quotes inside your text fields (e.g., `\"`). Do not use raw newlines (`\n`) in strings unless properly escaped (`\\n`). Do not leave trailing commas.
+- CORRECTED CODE GENERATION: You must provide the fully corrected, compiling, and logically sound version of the student's code. You MUST use inline comments (e.g., `// LLM FIX:` or `# LLM FIX:`) directly above the lines you changed to explain what you fixed. Because this will be in JSON, ensure all newlines (`\n`) and quotes (`\"`) inside the code string are properly escaped.
 </critical_directives>
 
 <output_format>
+You MUST structure your response EXACTLY like this, using these two specific tags. Do NOT put the corrected code inside the JSON.
+
+[JSON_REPORT]
 {
-  "detected_language": "State the language (e.g., 'Python', 'Java', 'C++', 'JavaScript')",
-  "scratchpad": "[Context]: <Language & Boilerplate check> | [Security]: <Safe/Unsafe> | [Compilation]: <List fatal errors> | [Rubric & Logic]: <Step-by-step constraint check> | [Edge Cases]: <Simulation results>",
+  "detected_language": "State the language (e.g., 'C')",
+  "overview": "A strict, academic, single-paragraph summary.",
   "syntax_errors": [
     {
-      "issue": "Specific compilation/execution error (e.g., 'Missing semicolon at the end of line 12' or 'SyntaxError: invalid syntax').",
-      "fix": "Exact code correction (e.g., 'Add `;` to the end of the statement')."
+      "issue": "Specific compilation/execution error.",
+      "fix": "Exact code correction."
     }
   ],
   "logical_errors": [
     {
-      "issue": "Specific algorithmic flaw, missing feature, or rubric violation (e.g., 'The function uses shallow equality `==` for comparing strings in Java instead of `.equals()`.').",
-      "fix": "Concrete algorithmic solution or method (e.g., 'Replace `str1 == str2` with `str1.equals(str2)`')."
+      "issue": "Specific algorithmic flaw or rubric violation.",
+      "fix": "Concrete algorithmic solution."
     }
   ],
-  "overview": "A strict, academic, single-paragraph summary of the submission's quality, completeness, and conceptual understanding. Strictly under 100 words."
+  "scratchpad": "Brief TA evaluation notes"
 }
+[/JSON_REPORT]
+
+[CORRECTED_CODE]
+Write the fully corrected, compiling code here.
+Use inline comments like // LLM FIX: to explain changes.
+[/CORRECTED_CODE]
 </output_format>

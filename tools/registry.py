@@ -40,10 +40,24 @@ class ToolRegistry:
         return False
 
     def get(self, name: str) -> Tool | None:
+        # 1. Check exact matches in both registries first
         if name in self._tools:
             return self._tools[name]
-        elif name in self._mcp_tools:
+        if name in self._mcp_tools:
             return self._mcp_tools[name]
+
+        # 2. Fuzzy Match Logic
+        # This handles cases where the LLM accidentally joins arguments to the name
+        # e.g., converts 'search_ast{"query": "..."}' into 'search_ast'
+        clean_name = name.split("{")[0].strip()
+        
+        # Check standard tools with the cleaned name
+        if clean_name in self._tools:
+            return self._tools[clean_name]
+            
+        # Check MCP tools with the cleaned name
+        if clean_name in self._mcp_tools:
+            return self._mcp_tools[clean_name]
 
         return None
 

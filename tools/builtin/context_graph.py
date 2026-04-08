@@ -55,6 +55,12 @@ class ContextGraphTool(Tool):
                 return ToolResult.error_result(
                     "Missing 'target_node' parameter. The LLM failed to provide the function name."
                 )
+            if " " in target_node.strip():
+                return ToolResult.error_result(
+                    f"CRITICAL ERROR: You passed the semantic phrase '{target_node}'. "
+                    "This tool ONLY accepts exact, spaceless function/class names (e.g., 'calculate_grades'). "
+                    "You MUST go back to PHASE 1 and use the `search_ast` tool to find the exact function name first."
+                )
             
             # The agent passes its current working directory automatically (safe extraction)
             cwd = str(getattr(invocation, "cwd", getattr(invocation, "current_working_directory", "")))
@@ -80,9 +86,7 @@ class ContextGraphTool(Tool):
                 )
                 
             # 6. Format the output nicely for the LLM
-            output_lines = [f"Topological Dependencies for '{target_node}':", "This function relies on the following components to execute:"]
-            
-            # 6. Format the output nicely for the LLM
+            local_files_to_read = set()
             local_deps = []
             external_deps = []
             
@@ -92,22 +96,29 @@ class ContextGraphTool(Tool):
                 
                 if file_name:
                     local_deps.append(f"- `{dep}` (File: {file_name})")
+                    local_files_to_read.add(file_name)
                 else:
                     external_deps.append(f"`{dep}`")
             
-            output_lines = [f"Topological Dependencies for '{target_node}':"]
+            output_lines = [f"✅ GRAPH TRAVERSAL COMPLETE for '{target_node}'."]
             
+            if external_deps:
+                output_lines.append("\n=== EXTERNAL / SYSTEM LIBRARIES (DO NOT READ THESE) ===")
+                output_lines.append(", ".join(external_deps))
+
             if local_deps:
-                output_lines.append("\n=== LOCAL HELPER FUNCTIONS (ACTION REQUIRED) ===")
-                output_lines.append("You MUST use the read_file tool on the following files:")
+                output_lines.append("\n=== LOCAL HELPER FUNCTIONS (DEPENDENCIES) ===")
                 output_lines.extend(local_deps)
+                
+                # THE BOSSY OVERRIDE
+                output_lines.append("\n🛑 CRITICAL SYSTEM INSTRUCTION 🛑")
+                output_lines.append("You are currently in PHASE 3 (Topological Tracing).")
+                output_lines.append("You are FORBIDDEN from explaining the code or answering the user right now.")
+                output_lines.append("Your IMMEDIATE next action MUST be to use the `read_file` tool to read the contents of the local files listed above.")
+                output_lines.append("Do not output any conversational text. Emit the `read_file` JSON tool call immediately.")
             else:
                 output_lines.append("\n=== LOCAL HELPER FUNCTIONS ===")
-                output_lines.append("None. This function does not call any local helpers.")
-                
-            if external_deps:
-                output_lines.append("\n=== EXTERNAL / SYSTEM LIBRARIES (IGNORE) ===")
-                output_lines.append(", ".join(external_deps))
+                output_lines.append("None. This function does not call any local helpers. You may now synthesize your final answer to the user.")
                 
             final_output = "\n".join(output_lines)
             

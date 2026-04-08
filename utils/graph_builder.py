@@ -112,9 +112,8 @@ if __name__ == "__main__":
     builder = PolyglotGraphBuilder()
     builder.build_graph(".") 
     
-    # 🛑 THE MAGIC TARGET 🛑
     # Put the exact name of a function you want to see here
-    target = "_get_environment_section" 
+    target = "get_system_prompt" 
     
     print(f"Extracting focused sub-graph for '{target}'...")
     builder.export_focused_subgraph(target_node=target, depth=1)

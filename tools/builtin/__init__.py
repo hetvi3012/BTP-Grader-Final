@@ -10,6 +10,7 @@ from tools.builtin.web_fetch import WebFetchTool
 from tools.builtin.web_search import WebSearchTool
 from tools.builtin.write_file import WriteFileTool
 from tools.builtin.context_graph import ContextGraphTool
+from tools.ast_rag import ASTRagTool
 __all__ = [
     "ReadFileTool",
     "WriteFileTool",
@@ -23,6 +24,7 @@ __all__ = [
     "TodosTool",
     "MemoryTool",
     "ContextGraphTool",
+    "ASTRagTool",
 ]
 
 
@@ -40,4 +42,5 @@ def get_all_builtin_tools() -> list[type]:
         TodosTool,
         MemoryTool,
         ContextGraphTool,
+        ASTRagTool,
     ]

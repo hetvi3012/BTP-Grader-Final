@@ -153,7 +153,17 @@ class LLMClient:
 
                         if tool_call_delta.function:
                             if tool_call_delta.function.name:
-                                tool_calls[idx]["name"] = tool_call_delta.function.name
+                                raw_name = tool_call_delta.function.name
+                                # 🚨 FIX: If the model jams JSON into the name field, strip it out
+                                if "{" in raw_name:
+                                    clean_name = raw_name.split("{")[0].strip()
+                                    tool_calls[idx]["name"] = clean_name
+                                    # Optional: Feed the rest into arguments
+                                    json_part = "{" + "{".join(raw_name.split("{")[1:])
+                                    tool_calls[idx]["arguments"] += json_part
+                                else:
+                                    tool_calls[idx]["name"] = raw_name
+
                                 yield StreamEvent(
                                     type=StreamEventType.TOOL_CALL_START,
                                     tool_call_delta=ToolCallDelta(
@@ -208,11 +218,23 @@ class LLMClient:
         tool_calls: list[ToolCall] = []
         if message.tool_calls:
             for tc in message.tool_calls:
+                raw_name = tc.function.name
+                raw_args = tc.function.arguments
+                
+                # If the model merged them, split them
+                if "{" in raw_name:
+                    clean_name = raw_name.split("{")[0].strip()
+                    # Add the JSON part from the name to the actual arguments string
+                    json_part = "{" + "{".join(raw_name.split("{")[1:])
+                    raw_args = json_part + raw_args
+                else:
+                    clean_name = raw_name
+
                 tool_calls.append(
                     ToolCall(
                         call_id=tc.id,
-                        name=tc.function.name,
-                        arguments=parse_tool_call_arguments(tc.function.arguments),
+                        name=clean_name,
+                        arguments=parse_tool_call_arguments(raw_args),
                     )
                 )
 
